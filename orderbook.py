@@ -53,11 +53,17 @@ except Exception as e:
 
 # ---------------- PREPARE DATA ----------------
 def prepare_df(data, reverse=False):
-    df = pd.DataFrame(data, columns=["price", "qty"]).astype(float)
+    # Coinbase gives [price, size, num-orders]
+    clean_data = [[row[0], row[1]] for row in data]
+
+    df = pd.DataFrame(clean_data, columns=["price", "qty"]).astype(float)
     df["total"] = df["price"] * df["qty"]
+
     if reverse:
         df = df.iloc[::-1]
+
     return df
+
 
 # ---------------- UI ----------------
 if bids and asks:
@@ -95,5 +101,6 @@ else:
     st.warning("Fetching live order book from Binance… please wait 1–2 seconds")
 
 st.caption("SmartTradeX | Live Binance BTC Order Book (Read-Only)")
+
 
 
