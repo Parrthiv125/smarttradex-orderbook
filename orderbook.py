@@ -3,37 +3,48 @@ import requests
 import pandas as pd
 from streamlit_autorefresh import st_autorefresh
 
-# ---------------- PAGE ----------------
-st.set_page_config(layout="wide")
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(
+    page_title="SmartTradeX Order Book",
+    layout="centered"
+)
+
 st.title("📘 SmartTradeX — BTC Live Order Book")
 
-st_autorefresh(interval=1500, key="refresh")
+# Auto refresh every 2 seconds
+st_autorefresh(interval=2000, key="refresh")
 
 # ---------------- STYLE ----------------
 st.markdown("""
 <style>
-body { background-color:#0e1117; }
-table { font-size:13px; }
-th, td { text-align:right !important; padding:4px 8px !important; }
-.mid-price {
+body {
+    background-color:#0e1117;
+}
+table {
+    font-size:13px;
+    width:100%;
+}
+th, td {
+    text-align:right !important;
+    padding:4px 8px !important;
+}
+.sell {
+    color:#f6465d;
+}
+.buy {
+    color:#0ecb81;
+}
+.mid {
     font-size:22px;
     font-weight:bold;
     text-align:center;
-    padding:10px;
+    margin:10px 0;
 }
-.sell { color:#f6465d; }
-.buy { color:#0ecb81; }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- FETCH DATA (SAFE) ----------------
+# ---------------- DATA SOURCE (COINBASE) ----------------
 COINBASE_URL = "https://api.exchange.coinbase.com/products/BTC-USDT/book?level=2"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept": "application/json"
-}
-
-PARAMS = {"symbol": "BTCUSDT", "limit": 15}
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
     "Accept": "application/json"
@@ -45,62 +56,53 @@ try:
     r = requests.get(COINBASE_URL, headers=HEADERS, timeout=5)
     r.raise_for_status()
     data = r.json()
+
+    # Coinbase format: [price, size, num-orders]
     bids = data["bids"][:10]
     asks = data["asks"][:10]
-except Exception as e:
-    st.error("Live order book source not responding")
 
+except Exception:
+    st.error("Live order book source not responding. Please wait…")
 
-# ---------------- PREPARE DATA ----------------
+# ---------------- DATA PREP ----------------
 def prepare_df(data, reverse=False):
-    # Coinbase gives [price, size, num-orders]
-    clean_data = [[row[0], row[1]] for row in data]
-
-    df = pd.DataFrame(clean_data, columns=["price", "qty"]).astype(float)
+    clean = [[row[0], row[1]] for row in data]  # drop 3rd value
+    df = pd.DataFrame(clean, columns=["price", "qty"]).astype(float)
     df["total"] = df["price"] * df["qty"]
-
     if reverse:
         df = df.iloc[::-1]
-
     return df
-
 
 # ---------------- UI ----------------
 if bids and asks:
-    asks_df = prepare_df(asks, reverse=True)   # Sell on top
-    bids_df = prepare_df(bids)                 # Buy bottom
+    asks_df = prepare_df(asks, reverse=True)
+    bids_df = prepare_df(bids)
 
-    # SELL
+    # SELL ORDERS (TOP)
     st.markdown("### 🔴 Sell Orders")
     st.markdown(
         asks_df.style
         .format({"price":"{:,.2f}", "qty":"{:.5f}", "total":"{:,.2f}"})
-        .background_gradient(subset=["total"], cmap="Reds")
+        .set_properties(**{"color": "#f6465d"})
         .to_html(),
         unsafe_allow_html=True
     )
 
     # MID PRICE
-    mid = (float(bids[0][0]) + float(asks[0][0])) / 2
-    st.markdown(
-        f'<div class="mid-price">{mid:,.2f}</div>',
-        unsafe_allow_html=True
-    )
+    mid_price = (float(bids[0][0]) + float(asks[0][0])) / 2
+    st.markdown(f'<div class="mid">{mid_price:,.2f}</div>', unsafe_allow_html=True)
 
-    # BUY
+    # BUY ORDERS (BOTTOM)
     st.markdown("### 🟢 Buy Orders")
     st.markdown(
         bids_df.style
         .format({"price":"{:,.2f}", "qty":"{:.5f}", "total":"{:,.2f}"})
-        .background_gradient(subset=["total"], cmap="Greens")
+        .set_properties(**{"color": "#0ecb81"})
         .to_html(),
         unsafe_allow_html=True
     )
 
 else:
-    st.warning("Fetching live order book from Binance… please wait 1–2 seconds")
+    st.warning("Fetching live order book… please wait 1–2 seconds")
 
-st.caption("SmartTradeX | Live Binance BTC Order Book (Read-Only)")
-
-
-
+st.caption("SmartTradeX | Live BTC Order Book (Read-Only)")
