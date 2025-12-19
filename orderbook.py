@@ -3,118 +3,94 @@ import requests
 import pandas as pd
 from streamlit_autorefresh import st_autorefresh
 
-# --------------------------------
-# PAGE CONFIG
-# --------------------------------
-st.set_page_config(
-    page_title="SmartTradeX Order Book",
-    layout="wide"
-)
-
+# ---------------- PAGE ----------------
+st.set_page_config(layout="wide")
 st.title("📘 SmartTradeX — BTC Live Order Book")
 
-# Auto refresh every 1 second
-st_autorefresh(interval=1000, key="orderbook_refresh")
+st_autorefresh(interval=1500, key="refresh")
 
-# --------------------------------
-# DARK THEME + TABLE STYLE
-# --------------------------------
+# ---------------- STYLE ----------------
 st.markdown("""
 <style>
-body {
-    background-color: #0e1117;
+body { background-color:#0e1117; }
+table { font-size:13px; }
+th, td { text-align:right !important; padding:4px 8px !important; }
+.mid-price {
+    font-size:22px;
+    font-weight:bold;
+    text-align:center;
+    padding:10px;
 }
-table {
-    font-size: 14px;
-}
-th, td {
-    text-align: right !important;
-}
+.sell { color:#f6465d; }
+.buy { color:#0ecb81; }
 </style>
 """, unsafe_allow_html=True)
 
-# --------------------------------
-# FETCH LIVE ORDER BOOK (BINANCE)
-# --------------------------------
+# ---------------- FETCH DATA (SAFE) ----------------
 BINANCE_URL = "https://api.binance.com/api/v3/depth"
-params = {"symbol": "BTCUSDT", "limit": 10}
+PARAMS = {"symbol": "BTCUSDT", "limit": 15}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
+}
 
 bids, asks = [], []
 
 try:
-    res = requests.get(BINANCE_URL, params=params, timeout=2)
-    data = res.json()
+    r = requests.get(
+        BINANCE_URL,
+        params=PARAMS,
+        headers=HEADERS,
+        timeout=5
+    )
+    r.raise_for_status()
+    data = r.json()
     bids = data.get("bids", [])
     asks = data.get("asks", [])
-except:
-    st.error("Unable to fetch Binance data")
+except Exception as e:
+    st.error("Binance API not responding. Retrying automatically…")
 
-# --------------------------------
-# STYLING FUNCTION
-# --------------------------------
-def style_orderbook(df, side="buy"):
-    cmap = "Greens" if side == "buy" else "Reds"
+# ---------------- PREPARE DATA ----------------
+def prepare_df(data, reverse=False):
+    df = pd.DataFrame(data, columns=["price", "qty"]).astype(float)
+    df["total"] = df["price"] * df["qty"]
+    if reverse:
+        df = df.iloc[::-1]
+    return df
 
-    return (
-        df.style
-        .format({
-            "Price (USDT)": "{:,.2f}",
-            "Amount (BTC)": "{:.5f}",
-            "Total (USDT)": "{:,.2f}",
-            "Sum (USDT)": "{:,.2f}",
-        })
-        .background_gradient(subset=["Sum (USDT)"], cmap=cmap)
+# ---------------- UI ----------------
+if bids and asks:
+    asks_df = prepare_df(asks, reverse=True)   # Sell on top
+    bids_df = prepare_df(bids)                 # Buy bottom
+
+    # SELL
+    st.markdown("### 🔴 Sell Orders")
+    st.markdown(
+        asks_df.style
+        .format({"price":"{:,.2f}", "qty":"{:.5f}", "total":"{:,.2f}"})
+        .background_gradient(subset=["total"], cmap="Reds")
+        .to_html(),
+        unsafe_allow_html=True
     )
 
-# --------------------------------
-# UI — SIDE BY SIDE ORDER BOOK
-# --------------------------------
-col_buy, col_sell = st.columns(2)
+    # MID PRICE
+    mid = (float(bids[0][0]) + float(asks[0][0])) / 2
+    st.markdown(
+        f'<div class="mid-price">{mid:,.2f}</div>',
+        unsafe_allow_html=True
+    )
 
-# ============ BUY SIDE ============
-with col_buy:
-    st.subheader("🟢 Buy Orders")
+    # BUY
+    st.markdown("### 🟢 Buy Orders")
+    st.markdown(
+        bids_df.style
+        .format({"price":"{:,.2f}", "qty":"{:.5f}", "total":"{:,.2f}"})
+        .background_gradient(subset=["total"], cmap="Greens")
+        .to_html(),
+        unsafe_allow_html=True
+    )
 
-    if bids:
-        buy_df = pd.DataFrame(bids, columns=["Price", "Amount"]).astype(float)
-        buy_df["Total"] = buy_df["Price"] * buy_df["Amount"]
-        buy_df["Sum"] = buy_df["Total"].cumsum()
-
-        buy_df.columns = [
-            "Price (USDT)",
-            "Amount (BTC)",
-            "Total (USDT)",
-            "Sum (USDT)"
-        ]
-
-        st.markdown(
-            style_orderbook(buy_df, "buy").to_html(),
-            unsafe_allow_html=True
-        )
-    else:
-        st.warning("Waiting for buy orders...")
-
-# ============ SELL SIDE ============
-with col_sell:
-    st.subheader("🔴 Sell Orders")
-
-    if asks:
-        sell_df = pd.DataFrame(asks, columns=["Price", "Amount"]).astype(float)
-        sell_df["Total"] = sell_df["Price"] * sell_df["Amount"]
-        sell_df["Sum"] = sell_df["Total"].cumsum()
-
-        sell_df.columns = [
-            "Price (USDT)",
-            "Amount (BTC)",
-            "Total (USDT)",
-            "Sum (USDT)"
-        ]
-
-        st.markdown(
-            style_orderbook(sell_df, "sell").to_html(),
-            unsafe_allow_html=True
-        )
-    else:
-        st.warning("Waiting for sell orders...")
+else:
+    st.warning("Fetching live order book from Binance… please wait 1–2 seconds")
 
 st.caption("SmartTradeX | Live Binance BTC Order Book (Read-Only)")
