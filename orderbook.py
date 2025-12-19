@@ -28,6 +28,7 @@ th, td { text-align:right !important; padding:4px 8px !important; }
 
 # ---------------- FETCH DATA (SAFE) ----------------
 BINANCE_URL = "https://api.binance.com/api/v3/depth"
+
 PARAMS = {"symbol": "BTCUSDT", "limit": 15}
 HEADERS = {
     "User-Agent": "Mozilla/5.0",
@@ -94,3 +95,4 @@ else:
     st.warning("Fetching live order book from Binance… please wait 1–2 seconds")
 
 st.caption("SmartTradeX | Live Binance BTC Order Book (Read-Only)")
+
