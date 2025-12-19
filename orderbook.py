@@ -27,7 +27,11 @@ th, td { text-align:right !important; padding:4px 8px !important; }
 """, unsafe_allow_html=True)
 
 # ---------------- FETCH DATA (SAFE) ----------------
-BINANCE_URL = "https://api.binance.com/api/v3/depth"
+COINBASE_URL = "https://api.exchange.coinbase.com/products/BTC-USDT/book?level=2"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json"
+}
 
 PARAMS = {"symbol": "BTCUSDT", "limit": 15}
 HEADERS = {
@@ -38,18 +42,14 @@ HEADERS = {
 bids, asks = [], []
 
 try:
-    r = requests.get(
-        BINANCE_URL,
-        params=PARAMS,
-        headers=HEADERS,
-        timeout=5
-    )
+    r = requests.get(COINBASE_URL, headers=HEADERS, timeout=5)
     r.raise_for_status()
     data = r.json()
-    bids = data.get("bids", [])
-    asks = data.get("asks", [])
+    bids = data["bids"][:10]
+    asks = data["asks"][:10]
 except Exception as e:
-    st.error("Binance API not responding. Retrying automatically…")
+    st.error("Live order book source not responding")
+
 
 # ---------------- PREPARE DATA ----------------
 def prepare_df(data, reverse=False):
@@ -95,4 +95,5 @@ else:
     st.warning("Fetching live order book from Binance… please wait 1–2 seconds")
 
 st.caption("SmartTradeX | Live Binance BTC Order Book (Read-Only)")
+
 
